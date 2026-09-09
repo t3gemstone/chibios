@@ -635,6 +635,17 @@ int main(void) {
   halInit();
   chSysInit();
 
+  /* Ownership of the console port, reported because it decides whether any
+     of what follows can work: the peripheral has to be powered and clocked
+     by the device manager before the driver may touch a single register.*/
+  trace_printf("UART1: on=%u clock=%u state=%u/%u fck=%u resets=%08x\n",
+               (unsigned)(board_uart1_claimed ? 1U : 0U),
+               (unsigned)(board_uart1_clocked ? 1U : 0U),
+               (unsigned)board_uart1_state_programmed,
+               (unsigned)board_uart1_state_current,
+               (unsigned)board_uart1_clock_hz,
+               (uint32_t)board_uart1_resets);
+
   /* Console up.*/
   drvStart(&SIOD1, &sio_config);
 

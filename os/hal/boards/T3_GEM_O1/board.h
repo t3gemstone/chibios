@@ -169,9 +169,17 @@
 #define AM67_MAIN_UART1_CLOCK   48000000U
 
 #if !defined(_FROM_ASM_)
+#include <stdbool.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
+  extern bool board_uart1_claimed;
+  extern bool board_uart1_clocked;
+  extern uint32_t board_uart1_state_programmed;
+  extern uint32_t board_uart1_state_current;
+  extern uint32_t board_uart1_clock_hz;
+  extern uint32_t board_uart1_resets;
   void boardInit(void);
 #ifdef __cplusplus
 }

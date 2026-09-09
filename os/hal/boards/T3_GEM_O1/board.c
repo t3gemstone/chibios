@@ -27,9 +27,12 @@
  *          override earlier ones on overlap.
  */
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "board.h"
+#include "am67_registry.h"
+#include "am67_sci.h"
 
 /* DRSR is (size_exponent - 1) << 1 | enable, region size is 2^exponent.*/
 #define MPU_SIZE_32K            ((14U << 1) | 1U)
@@ -359,10 +362,55 @@ void __late_init(void) {
 }
 
 /*
- * Board-specific initialization, invoked by halInit() after the drivers.
- * Clocks and pinmux are owned by the Linux host on this board, the MPU
- * and caches are configured by tcm_early_init() long before this point,
- * nothing is left to do here.
+ * Outcome of the peripheral claim below, published because a firmware that
+ * failed to claim its console cannot report the failure over that console.
+ */
+bool board_uart1_claimed;
+bool board_uart1_clocked;
+uint32_t board_uart1_state_programmed;
+uint32_t board_uart1_state_current;
+uint32_t board_uart1_clock_hz;
+uint32_t board_uart1_resets;
+
+/*
+ * Board-specific initialization, invoked by halInit() after the drivers and
+ * before any of them is started. The MPU and caches are configured by
+ * tcm_early_init() long before this point.
+ *
+ * What is left is ownership. On a K3 device the device manager hands out
+ * power and clocks per host, and a module nobody claimed stays unclocked;
+ * touching it then stalls the interconnect and hangs this core. Historically
+ * this board got away with saying nothing here, because the Linux host binds
+ * its own driver to MAIN_UART1 and the firmware rode on the clock that probe
+ * left enabled -- which is also why both sides ended up servicing the same
+ * interrupt. Claiming the device here is what makes it ours, and what lets
+ * the host device tree mark the port reserved.
+ *
+ * Pinmux is deliberately not touched: the pads are shared with the PWM
+ * outputs on this carrier and which of them the firmware drives is decided
+ * by the host device tree, not here.
  */
 void boardInit(void) {
+
+  /* Asked for without the exclusive flag on purpose. Exclusive is the
+     honest description of ownership, but it is refused outright when
+     another host already holds the device, which is exactly the case while
+     the host device tree still binds a driver to this port. Plain ON works
+     in both arrangements: it enables the device when nobody else has, and
+     is a no-op when the host already did.*/
+  board_uart1_claimed = sciDeviceSetState(AM67_MAIN_UART1_SCI_DEV,
+                                          AM67_SCI_DEV_STATE_ON, false);
+
+  /* Power and clocks are separate requests: turning the device on leaves
+     its clocks in the automatic state, and the functional clock is asked
+     for explicitly here so that ownership does not depend on that default.*/
+  board_uart1_clocked = sciClockOn(AM67_MAIN_UART1_SCI_DEV,
+                                   AM67_MAIN_UART1_SCI_CLK);
+
+  (void)sciDeviceGetState(AM67_MAIN_UART1_SCI_DEV,
+                          &board_uart1_state_programmed,
+                          &board_uart1_state_current,
+                          &board_uart1_resets);
+  (void)sciClockGetFreq(AM67_MAIN_UART1_SCI_DEV, AM67_MAIN_UART1_SCI_CLK,
+                        &board_uart1_clock_hz);
 }
